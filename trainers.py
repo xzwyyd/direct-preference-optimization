@@ -213,7 +213,11 @@ class BasicTrainer(object):
            We do this to avoid doing two forward passes, because it's faster for FSDP.
         """
         concatenated_batch = concatenated_inputs(batch)
-        all_logits = model(concatenated_batch['concatenated_input_ids'], attention_mask=concatenated_batch['concatenated_attention_mask']).logits.to(torch.float32)
+        # print("\nconcatenated_batch['concatenated_input_ids']:",concatenated_batch['concatenated_input_ids'])
+        # print("\nconcatenated_batch['concatenated_attention_mask']:",concatenated_batch['concatenated_attention_mask'])
+        all_logits = model(concatenated_batch['concatenated_input_ids'], attention_mask=concatenated_batch['concatenated_attention_mask']).logits
+        # print('pre_all_logits:', all_logits)
+        all_logits = all_logits.to(torch.float32)
         all_logps = _get_batch_logps(all_logits, concatenated_batch['concatenated_labels'], average_log_prob=False)
         chosen_logps = all_logps[:batch['chosen_input_ids'].shape[0]]
         rejected_logps = all_logps[batch['chosen_input_ids'].shape[0]:]
@@ -230,7 +234,10 @@ class BasicTrainer(object):
             policy_chosen_logps, policy_rejected_logps = self.concatenated_forward(self.policy, batch)
             with torch.no_grad():
                 reference_chosen_logps, reference_rejected_logps = self.concatenated_forward(self.reference_model, batch)
-
+            # print("policy_chosen_logps", policy_chosen_logps)
+            # print("policy_rejected_logps", policy_rejected_logps)
+            # print("reference_chosen_logps", reference_chosen_logps)
+            # print("reference_rejected_logps", reference_rejected_logps)
             if loss_config.name == 'dpo':
                 loss_kwargs = {'beta': loss_config.beta, 'reference_free': loss_config.reference_free, 'label_smoothing': loss_config.label_smoothing, 'ipo': False}
             elif loss_config.name == 'ipo':
@@ -288,6 +295,8 @@ class BasicTrainer(object):
         last_log = None
 
         for batch in self.train_iterator:
+            # print('\nchosen:', batch['chosen'])
+            # print('\nrejected', batch['rejected'])
             #### BEGIN EVALUATION ####
             if self.example_counter % self.config.eval_every == 0 and (self.example_counter > 0 or self.config.do_first_eval):
                 rank0_print(f'Running evaluation after {self.example_counter} train examples')
@@ -302,6 +311,7 @@ class BasicTrainer(object):
 
                 for eval_batch in (tqdm.tqdm(self.eval_batches, desc='Computing eval metrics') if self.rank == 0 else self.eval_batches):
                     local_eval_batch = slice_and_move_batch_for_device(eval_batch, self.rank, self.world_size, self.rank)
+                    # print('\n\nlocal_eval_batch:', local_eval_batch)
                     with torch.no_grad():
                         _, eval_metrics = self.get_batch_metrics(local_eval_batch, self.config.loss, train=False)
 

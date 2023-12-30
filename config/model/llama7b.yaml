@@ -1,8 +1,11 @@
-name_or_path: huggyllama/llama-7b
+# name_or_path: /mnt/16t/xzwnlp/model/llama-2-7b
+name_or_path: /mnt/16t/xzwnlp/model/llama-2-13b-chat
 tokenizer_name_or_path: null
 archive: null
 block_name: LlamaDecoderLayer
 
 policy_dtype: float32
-fsdp_policy_mp: null
-reference_dtype: float16
+# fsdp_policy_mp: null
+fsdp_policy_mp: bfloat16
+# reference_dtype: float16
+reference_dtype: bfloat16 #使用dpo时，用float16会出现nan

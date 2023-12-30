@@ -159,6 +159,32 @@ def get_hh(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str,
 
     return data
 
+def get_safety(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
+    """Load the safety dataset from local path and convert it to the necessary format. See hh for the format.
+
+       We filter preference pairs to only keep pairs where the score ratio is at least 2.
+       For this dataset, the sft_target is the response with the highest score.
+    """
+    print(f'Loading safety dataset ({split} split) from Huggingface...')
+    dataset = datasets.load_dataset('json',data_dir = '/mnt/16t/xzwnlp/plus_EditSafety/English',data_files={'train':'plus_train_EditSafety.json','test': 'plus_val_EditSafety.json'}, split=split, cache_dir=cache_dir)
+    print('done')
+
+    def split_responses(ex):
+        chosen_response = ex['safety_generation']
+        rejected_response = ex['unsafety_generation']
+        return chosen_response, rejected_response
+
+    data = defaultdict(lambda: defaultdict(list))
+    for row in tqdm.tqdm(dataset, desc='Processing safety', disable=silent):
+        prompt = '\n\n' + row['prompt'] + '\n\n'
+        chosen, rejected = split_responses(row)
+        responses = [chosen, rejected]
+        n_responses = len(data[prompt]['responses'])
+        data[prompt]['pairs'].append((n_responses, n_responses + 1))
+        data[prompt]['responses'].extend(responses)
+        data[prompt]['sft_target'] = chosen
+
+    return data
 
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
     """Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'."""
@@ -168,6 +194,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_hh(split, silent=silent, cache_dir=cache_dir)
     elif name == 'se':
         data = get_se(split, silent=silent, cache_dir=cache_dir)
+    elif name == 'safety':
+        data = get_safety(split, silent=silent, cache_dir=cache_dir)
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
@@ -316,7 +344,8 @@ def get_batch_iterator(names: List[str],
         permutation_seeds = iter(np.random.randint(0, 2**32, size=1000000))
         flat_data = []
         for name in names:
-            truncation_mode = 'keep_end' if name == 'hh' else 'keep_start'
+            truncation_mode = 'keep_end' if name == 'hh' or name == 'safety' else 'keep_start'
+            print('truncation_mode', truncation_mode)
             for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir).items():
                 flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
 
